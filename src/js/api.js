@@ -1,0 +1,86 @@
+/* api.js — fetch wrapper for Glass Journal API */
+(function (global) {
+  'use strict';
+
+  const DEFAULT_BASE = 'https://thread-07jf.onrender.com';
+  const STORAGE_KEY = 'gj:apiBase';
+
+  const Api = {
+    getBase() {
+      return localStorage.getItem(STORAGE_KEY) || DEFAULT_BASE;
+    },
+    setBase(url) {
+      if (url && url.trim()) localStorage.setItem(STORAGE_KEY, url.trim().replace(/\/+$/, ''));
+      else localStorage.removeItem(STORAGE_KEY);
+    },
+
+    async req(path, { method = 'GET', json, form, signal } = {}) {
+      const base = Api.getBase();
+      const init = { method, headers: {}, signal };
+      let body;
+      if (json !== undefined) {
+        init.headers['Content-Type'] = 'application/json';
+        body = JSON.stringify(json);
+      } else if (form) {
+        body = form;
+      }
+      const res = await fetch(base + path, init);
+      const text = await res.text();
+      let data = null;
+      if (text) {
+        try { data = JSON.parse(text); } catch { data = text; }
+      }
+      if (!res.ok) {
+        const err = new Error((data && data.error) || ('http_' + res.status));
+        err.status = res.status;
+        err.body = data;
+        throw err;
+      }
+      return data;
+    },
+
+    /* health */       H: () => Api.req('/health'),
+    /* posts list */   listPosts: (cursor, limit = 20) => Api.req('/posts?limit=' + limit + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '')),
+    /* post detail */  getPost:  (id) => Api.req('/posts/' + id),
+    /* create post */  createPost: (payload) => Api.req('/posts', { method: 'POST', json: payload }),
+    /* update post */  updatePost: (id, payload) => Api.req('/posts/' + id, { method: 'PATCH', json: payload }),
+    /* delete post */  deletePost: (id) => Api.req('/posts/' + id, { method: 'DELETE' }),
+
+    /* search */       search: (params) => {
+      const q = new URLSearchParams();
+      if (params.q)    q.set('q', params.q);
+      if (params.tag)  q.set('tag', params.tag);
+      if (params.type) q.set('type', params.type);
+      if (params.limit) q.set('limit', String(params.limit));
+      return Api.req('/posts/search?' + q.toString());
+    },
+
+    /* by tag */       byTag: (tag) => Api.req('/posts/tags/' + encodeURIComponent(tag)),
+
+    /* upload */       upload: (file, postId, onProgress) => {
+      return new Promise((resolve, reject) => {
+        const fd = new FormData();
+        if (postId) fd.append('post_id', postId);
+        fd.append('file', file);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', Api.getBase() + '/media/upload');
+        if (onProgress) xhr.upload.addEventListener('progress', (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); });
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText)); }
+            catch (e) { reject(new Error('bad_response')); }
+          } else {
+            let body = null; try { body = JSON.parse(xhr.responseText); } catch {}
+            const err = new Error((body && body.error) || ('http_' + xhr.status));
+            err.status = xhr.status; err.body = body; reject(err);
+          }
+        };
+        xhr.onerror = () => reject(new Error('network'));
+        xhr.send(fd);
+      });
+    },
+    allowedMimes: () => Api.req('/media/allowed-mimes'),
+  };
+
+  global.Api = Api;
+})(window);
