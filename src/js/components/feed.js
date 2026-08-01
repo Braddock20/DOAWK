@@ -103,12 +103,10 @@
     return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' });
   }
 
-  function isMePost(p) {
-    // The API is single-user. We render the user ("me") on the right when their
-    // avatar/displayName is set OR for the local "diary" feel, alternate them.
-    // To keep it social-app style, we randomly alternate based on id for visual variety.
-    if (Store.state.displayName && Store.state.displayName !== 'You') return true;
-    return (p.id.charCodeAt(0) % 2) === 0;
+  function isMePost() {
+    // Single-user diary — every entry is yours. Always render it as "sent"
+    // (right-aligned), like a thread of messages to yourself.
+    return true;
   }
 
   function renderEmpty() {
