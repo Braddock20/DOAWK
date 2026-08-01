@@ -12,6 +12,8 @@
     'application/vnd.android.package-archive','application/java-archive',
     'application/pdf','application/zip','application/x-zip-compressed',
   ];
+  // Common but NOT in the server's allow-list — we'll convert these to JPEG before uploading.
+  const CONVERT_TO_JPEG = ['image/heic', 'image/heif', 'image/avif', 'image/tiff', 'image/bmp'];
 
   const state = {
     files: [],          // { id, file, name, mime, size, progress, uploaded, mediaId, error, thumb }
@@ -67,7 +69,7 @@
     hostEl.appendChild(composer);
 
     // File picker
-    fileInputEl = h('input', { type: 'file', multiple: true, style: { display: 'none' } });
+    fileInputEl = h('input', { type: 'file', multiple: true, accept: 'image/*,video/*,audio/*,application/pdf,application/zip,application/vnd.android.package-archive,.heic,.heif', style: { display: 'none' } });
     fileInputEl.addEventListener('change', () => {
       const files = Array.from(fileInputEl.files || []);
       files.forEach(addFile);
@@ -98,15 +100,70 @@
   }
 
   function addFile(file) {
-    if (!ALLOWED.includes(file.type)) {
-      toast('Unsupported file type: ' + (file.type || 'unknown'), 'error');
+    if (!file) return;
+    // iOS sometimes gives empty mime for camera-roll images — guess it from extension.
+    let mime = file.type;
+    if (!mime) {
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      const guess = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', m4a: 'audio/x-m4a', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', pdf: 'application/pdf', zip: 'application/zip', apk: 'application/vnd.android.package-archive' };
+      mime = guess[ext] || '';
+      try { Object.defineProperty(file, 'type', { value: mime, configurable: true }); } catch {}
+    }
+
+    if (CONVERT_TO_JPEG.includes(mime)) {
+      // Heic/avif/tiff → JPEG (server doesn't accept them).
+      convertToJpeg(file).then((converted) => {
+        const entry = makeEntry(converted, converted.name);
+        state.files.push(entry);
+        renderAttachments();
+        toast('Converted to JPEG for upload', '', 1500);
+      }).catch((e) => {
+        toast('Couldn\'t convert image: ' + e.message, 'error');
+      });
+      return;
+    }
+
+    if (!ALLOWED.includes(mime)) {
+      toast('Unsupported file type: ' + (mime || 'unknown') + ' — server allows: jpg, png, gif, webp, svg, mp4, mov, webm, mp3, m4a, wav, pdf, zip, apk', 'error', 5000);
       return;
     }
     if (file.size > 500 * 1024 * 1024) { toast('File too large (>500MB)', 'error'); return; }
 
-    const entry = { id: Util.uid('f'), file, name: file.name, mime: file.type, size: file.size, progress: 0, uploaded: false, error: null, mediaId: null };
+    const entry = makeEntry(file, file.name);
     state.files.push(entry);
     renderAttachments();
+  }
+
+  function makeEntry(file, name) {
+    return { id: Util.uid('f'), file, name, mime: file.type, size: file.size, progress: 0, uploaded: false, error: null, mediaId: null };
+  }
+
+  // Convert HEIC/HEIF/AVIF/TIFF/BMP to JPEG using a canvas.
+  // This works because iOS Safari decodes HEIC natively into an <img>.
+  async function convertToJpeg(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('decode failed'));
+        i.src = url;
+      });
+      // Downscale if huge (camera images can be 12MP+)
+      const max = 2048;
+      const ratio = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * ratio);
+      const h = Math.round(img.naturalHeight * ratio);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+      if (!blob) throw new Error('canvas toBlob failed');
+      const newName = (file.name.replace(/\.[^.]+$/, '') || 'image') + '.jpg';
+      return new File([blob], newName, { type: 'image/jpeg' });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   function removeFile(id) {
@@ -243,7 +300,7 @@
 
       toast('Entry saved', 'success', 1500);
     } catch (e) {
-      toast('Couldn\'t post: ' + (e.body?.error || e.message), 'error');
+      toast('Couldn\'t post: ' + (e.body?.detail || e.message), 'error', 5000);
     } finally {
       state.sending = false;
       if (sendBtn) sendBtn.disabled = false;
