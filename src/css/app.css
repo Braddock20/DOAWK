@@ -6,36 +6,38 @@
 
 /* ---------- Tokens ---------- */
 :root {
-  --bg:        #0a0a0c;
-  --bg-2:      #111114;
-  --bg-3:      #18181c;
+  --bg:        #0a0b0d;
+  --bg-2:      #121316;
+  --bg-3:      #1a1c20;
   --surface:   rgba(255,255,255,0.045);
-  --surface-2: rgba(255,255,255,0.08);
-  --surface-3: rgba(255,255,255,0.12);
+  --surface-2: rgba(255,255,255,0.075);
+  --surface-3: rgba(255,255,255,0.11);
   --border:    rgba(255,255,255,0.08);
-  --border-2:  rgba(255,255,255,0.16);
-  --text:      #f4f4f6;
-  --text-dim:  #b0b0bc;
-  --text-mute: #70707c;
+  --border-2:  rgba(255,255,255,0.15);
+  --text:      #f0efec;
+  --text-dim:  #a7a6a2;
+  --text-mute: #6c6b68;
 
-  --accent:        #a78bfa;     /* default purple */
-  --accent-2:      #f472b6;
-  --accent-3:      #fbbf24;
-  --accent-ink:    #0a0a0c;
-  --accent-soft:   rgba(167,139,250,0.15);
+  /* One accent, used flat everywhere. It matches the sent-bubble color
+     instead of introducing a second, unrelated brand hue. */
+  --accent:        #4f7cf0;
+  --accent-2:      #6690f2;     /* one shade lighter — logo mark only */
+  --accent-3:      #e8b23f;
+  --accent-ink:    #ffffff;
+  --accent-soft:   rgba(79,124,240,0.14);
 
-  --me:        #5b8def;     /* user (you) bubble */
-  --me-2:      #4778d8;
-  --them:      #1f1f24;     /* system posts */
-  --them-2:    #28282f;
+  --me:        #4f7cf0;     /* sent bubble = accent */
+  --me-2:      #4570e0;
+  --them:      #1c1e22;     /* received / system posts */
+  --them-2:    #24262b;
 
-  --pin:       #ffd166;
-  --danger:    #ff5a5a;
-  --success:   #34d399;
-  --warn:      #fbbf24;
+  --pin:       #e8b23f;
+  --danger:    #ef5858;
+  --success:   #3bc98f;
+  --warn:      #e8b23f;
 
-  --shadow:    0 12px 40px rgba(0,0,0,0.45);
-  --shadow-lg: 0 24px 60px rgba(0,0,0,0.55);
+  --shadow:    0 10px 28px rgba(0,0,0,0.35);
+  --shadow-lg: 0 20px 48px rgba(0,0,0,0.45);
 
   --r:    18px;
   --r-sm: 12px;
@@ -66,16 +68,18 @@
   --text-dim:  #4a4a55;
   --text-mute: #8a8a96;
 
-  --accent-ink: #fafaf7;
-  --accent-soft: rgba(124, 92, 240, 0.12);
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(37, 99, 235, 0.10);
 
+  --accent:    #2563eb;
+  --accent-2:  #3b74ec;
   --me:        #2563eb;
   --me-2:      #1d4ed8;
   --them:      #ffffff;
   --them-2:    #f4f3ed;
 
-  --shadow:    0 12px 40px rgba(0,0,0,0.10);
-  --shadow-lg: 0 24px 60px rgba(0,0,0,0.14);
+  --shadow:    0 10px 28px rgba(0,0,0,0.08);
+  --shadow-lg: 0 20px 48px rgba(0,0,0,0.12);
 }
 
 [data-theme="midnight"] {
@@ -161,7 +165,10 @@ a { color: var(--accent); text-decoration: none; }
 /* ---------- App layout ---------- */
 #app {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  /* 4 real rows flow here: top bar, tab bar, main views, composer.
+     Each must have its own explicit track — a missing track is what
+     used to force the tab bar into the flexible row and inflate it. */
+  grid-template-rows: auto auto 1fr auto;
   height: 100dvh;
   min-height: 0;
   max-width: 760px;
@@ -173,6 +180,13 @@ a { color: var(--accent); text-decoration: none; }
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
   overflow: hidden; /* prevent body scroll on small screens */
+}
+/* The 1fr row's grid item needs min-height:0 or it refuses to shrink
+   below its content size, which breaks the nested scroll areas below. */
+#views {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* ---------- Top bar ---------- */
@@ -192,12 +206,11 @@ a { color: var(--accent); text-decoration: none; }
   min-width: 0;
 }
 .top .brand .logo {
-  width: 34px; height: 34px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  width: 32px; height: 32px; border-radius: 9px;
+  background: linear-gradient(160deg, var(--accent), var(--me-2));
   display: grid; place-items: center;
   font-weight: 700; color: var(--accent-ink);
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent);
-  font-size: 16px;
+  font-size: 15px;
 }
 .top .brand .titles { min-width: 0; }
 .top .brand .titles .name {
@@ -246,9 +259,8 @@ a { color: var(--accent); text-decoration: none; }
 .tab:hover { color: var(--text); background: var(--surface-2); }
 .tab.active {
   color: var(--accent-ink);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   border-color: transparent;
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .tab .badge {
   background: var(--surface-3); color: var(--text);
@@ -293,11 +305,10 @@ a { color: var(--accent); text-decoration: none; }
 /* Post bubble (chat-bubble style) */
 .post {
   display: flex; flex-direction: column;
-  max-width: min(560px, 88%);
-  align-self: flex-start; /* me on left by default — see JS that flips for "me" avatar match */
+  max-width: min(560px, 85%);
+  align-self: flex-end; /* single-user diary — every entry is "sent" */
   animation: bubbleIn .25s var(--ease-out) both;
 }
-.post.is-me { align-self: flex-end; }
 .post.is-pinned {
   position: relative;
 }
@@ -499,11 +510,11 @@ a { color: var(--accent); text-decoration: none; }
   padding: 60px 24px; text-align: center; color: var(--text-mute);
 }
 .empty .glyph {
-  width: 80px; height: 80px; border-radius: 24px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  width: 64px; height: 64px; border-radius: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   display: grid; place-items: center;
-  box-shadow: 0 12px 40px color-mix(in srgb, var(--accent) 30%, transparent);
-  color: var(--accent-ink);
+  color: var(--accent);
 }
 .empty .glyph svg { width: 38px; height: 38px; stroke-width: 1.6; }
 .empty h3 { color: var(--text); margin: 0; font-size: 18px; }
@@ -572,14 +583,14 @@ a { color: var(--accent); text-decoration: none; }
   background: transparent; border: 0; color: inherit; opacity: 0.6; padding: 0; line-height: 1;
 }
 .composer .send {
-  width: 44px; height: 44px; border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--accent);
   color: var(--accent-ink); border: 0;
   display: grid; place-items: center;
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent);
-  transition: transform .15s var(--ease-out), filter .15s;
+  transition: transform .15s var(--ease-out), filter .15s, background .15s;
   flex: 0 0 44px;
 }
+.composer .send:not(:disabled):hover { background: var(--me-2); }
 .composer .send:disabled { opacity: 0.4; filter: grayscale(0.5); cursor: not-allowed; box-shadow: none; }
 .composer .send:not(:disabled):active { transform: scale(0.92); }
 .composer .send svg { width: 20px; height: 20px; }
@@ -763,8 +774,8 @@ a { color: var(--accent); text-decoration: none; }
   width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,0.6);
   display: grid; place-items: center; color: #fff; font-size: 16px;
 }
-.tile.audio { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, var(--bg-3)), var(--bg-3)); }
-.tile.file  { background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 22%, var(--bg-3)), var(--bg-3)); }
+.tile.audio { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 26%, var(--bg-3)), var(--bg-3)); }
+.tile.file  { background: linear-gradient(135deg, color-mix(in srgb, var(--pin) 20%, var(--bg-3)), var(--bg-3)); }
 
 .tag-cloud { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px; }
 .tag-cloud .pill {
@@ -843,10 +854,10 @@ a { color: var(--accent); text-decoration: none; }
   padding: 24px; text-align: center;
 }
 .lock .brand-big {
-  width: 88px; height: 88px; border-radius: 26px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  width: 72px; height: 72px; border-radius: 22px;
+  background: linear-gradient(160deg, var(--accent), var(--me-2));
   display: grid; place-items: center; color: var(--accent-ink);
-  box-shadow: 0 18px 60px color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--accent) 22%, transparent);
   margin-bottom: 18px;
 }
 .lock h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.02em; }
@@ -861,10 +872,10 @@ a { color: var(--accent); text-decoration: none; }
 .lock input:focus { outline: 0; border-color: var(--accent); }
 .lock .btn {
   padding: 14px 16px; font-size: 15px; font-weight: 600;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   color: var(--accent-ink); border: 0; border-radius: 14px;
-  box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 30%, transparent);
 }
+.lock .btn:active { background: var(--me-2); }
 .lock .hint { color: var(--text-mute); font-size: 12px; margin-top: 8px; }
 .lock .err { color: var(--danger); font-size: 12px; min-height: 16px; }
 
@@ -952,10 +963,10 @@ a { color: var(--accent); text-decoration: none; }
 }
 #splash.gone { opacity: 0; pointer-events: none; }
 #splash .splash-logo {
-  width: 72px; height: 72px; border-radius: 22px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  width: 64px; height: 64px; border-radius: 20px;
+  background: linear-gradient(160deg, var(--accent), var(--me-2));
   display: grid; place-items: center; color: var(--accent-ink);
-  box-shadow: 0 16px 48px color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 20%, transparent);
   animation: splashPop .5s var(--ease) both;
 }
 #splash .splash-logo svg { width: 36px; height: 36px; stroke-width: 1.6; }
