@@ -21,7 +21,6 @@ const CORE = [
   './src/js/util.js',
   './src/js/components/composer.js',
   './src/js/components/feed.js',
-  './src/js/components/lightbox.js',
   './src/js/components/recorder.js',
   './src/js/components/search.js',
   './src/js/components/settings.js',
