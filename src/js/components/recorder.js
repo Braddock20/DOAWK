@@ -77,7 +77,7 @@
       el.insertBefore(audioPreview, row);
       cancelBtn.textContent = 'Re-record';
       const send = h('button', { class: 'send-vn', text: 'Add to entry', onclick: () => {
-        const fname = 'voicenote_' + Date.now() + '.' + (recordedBlob.type.includes('mp4') ? 'm4a' : 'webm');
+        const fname = 'voice-note_' + Date.now() + '.' + (recordedBlob.type.includes('mp4') ? 'm4a' : 'webm');
         const file = new File([recordedBlob], fname, { type: recordedBlob.type });
         window.Composer.addFile(file);
         teardown(); el.remove();
