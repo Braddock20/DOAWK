@@ -246,10 +246,24 @@
   function boot() {
     Store.hydrate();
     applyTheme();
+    // Remove splash
+    const splash = document.getElementById('splash');
+    if (splash) { splash.classList.add('gone'); setTimeout(() => splash.remove(), 280); }
+
     if (Store.state.locked) showLock();
     else mountApp();
     setupInstall();
     registerSW();
+
+    // Surface unhandled errors so they don't disappear silently
+    window.addEventListener('error', (e) => {
+      console.error('[gj]', e.error || e.message);
+      toast('Something went wrong: ' + (e.message || 'unknown'), 'error', 4000);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('[gj]', e.reason);
+      toast('Promise error: ' + ((e.reason && e.reason.message) || e.reason), 'error', 4000);
+    });
 
     // Re-apply theme when prefs change
     Store.on(() => {
