@@ -43,6 +43,7 @@
       } else if (form) {
         body = form;
       }
+      if (body !== undefined) init.body = body;
       const res = await fetch(base + path, init);
       const text = await res.text();
       let data = null;
