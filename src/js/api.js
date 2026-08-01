@@ -5,6 +5,25 @@
   const DEFAULT_BASE = 'https://thread-07jf.onrender.com';
   const STORAGE_KEY = 'gj:apiBase';
 
+  // Map server error codes to human messages
+  function humanizeError(code) {
+    if (!code) return '';
+    const map = {
+      empty_post: 'Write some text or attach a file first.',
+      parent_not_found: 'The post you\'re replying to was deleted.',
+      has_replies: 'Delete the replies first, then the original post.',
+      unsupported_media: 'This file type isn\'t supported by the server.',
+      missing_file: 'No file was received by the server.',
+      expected_multipart: 'Upload failed (bad format). Try again.',
+      file_too_large: 'File is too large (max 500MB).',
+      missing_query: 'Type something to search for.',
+      storage_upload_failed: 'Server storage rejected the upload. Try again.',
+      internal_error: 'Server error. Try again in a moment.',
+      not_found: 'Not found.',
+    };
+    return map[code] || code;
+  }
+
   const Api = {
     getBase() {
       return localStorage.getItem(STORAGE_KEY) || DEFAULT_BASE;
@@ -31,7 +50,7 @@
         try { data = JSON.parse(text); } catch { data = text; }
       }
       if (!res.ok) {
-        const err = new Error((data && data.error) || ('http_' + res.status));
+        const err = new Error(humanizeError(data && data.error) || (data && data.error) || ('http_' + res.status));
         err.status = res.status;
         err.body = data;
         throw err;
@@ -61,7 +80,7 @@
       return new Promise((resolve, reject) => {
         const fd = new FormData();
         if (postId) fd.append('post_id', postId);
-        fd.append('file', file);
+        fd.append('file', file, file.name);
         const xhr = new XMLHttpRequest();
         xhr.open('POST', Api.getBase() + '/media/upload');
         if (onProgress) xhr.upload.addEventListener('progress', (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); });
@@ -71,11 +90,11 @@
             catch (e) { reject(new Error('bad_response')); }
           } else {
             let body = null; try { body = JSON.parse(xhr.responseText); } catch {}
-            const err = new Error((body && body.error) || ('http_' + xhr.status));
+            const err = new Error(humanizeError(body && body.error) || ('http_' + xhr.status));
             err.status = xhr.status; err.body = body; reject(err);
           }
         };
-        xhr.onerror = () => reject(new Error('network'));
+        xhr.onerror = () => reject(new Error('network — check your connection'));
         xhr.send(fd);
       });
     },
@@ -83,4 +102,5 @@
   };
 
   global.Api = Api;
+  global.Api.humanizeError = humanizeError;
 })(window);
