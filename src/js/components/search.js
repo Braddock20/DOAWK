@@ -1,122 +1,99 @@
-/* search.js — search bar with suggestions, type filter chips, results feed */
+/* search.js */
 (function (global) {
   'use strict';
-  const { h, debounce, escapeHtml, linkify, smartStamp, toast } = window.Util;
-  const Store = window.Store;
-  const Icons = window.Icons;
+  const { h, toast, ls, smartTime } = global.U;
+  const S = global.S;
+  const I = global.I;
 
   const TYPES = [
-    { id: '',          label: 'All',     icon: () => Icons.apps() },
-    { id: 'image',     label: 'Photos',  icon: () => Icons.image() },
-    { id: 'video',     label: 'Videos',  icon: () => Icons.media() },
-    { id: 'audio',     label: 'Audio',   icon: () => Icons.mic() },
-    { id: 'voice_note',label: 'Voice',   icon: () => Icons.mic() },
-    { id: 'file',      label: 'Files',   icon: () => Icons.doc() },
-    { id: 'apk',       label: 'APK',     icon: () => Icons.download() },
+    { id: '', label: 'All', icon: () => I.media(14) },
+    { id: 'image', label: 'Photos', icon: () => I.image(14) },
+    { id: 'video', label: 'Videos', icon: () => I.video(14) },
+    { id: 'audio', label: 'Audio', icon: () => I.mic(14) },
+    { id: 'voice_note', label: 'Voice', icon: () => I.mic(14) },
+    { id: 'file', label: 'Files', icon: () => I.file(14) },
   ];
-
   let state = { q: '', type: '' };
 
   function mount() {
-    const bar = document.getElementById('searchBar');
-    bar.innerHTML = '';
-    const field = h('div', { class: 'field' }, [
-      Icons.search(),
-      h('input', { id: 'searchInput', placeholder: 'Search entries, tags, files…', value: state.q, oninput: (e) => onInput(e.target.value) }),
-      state.q ? h('button', { class: 'icon-btn', style: { width: '32px', height: '32px', borderRadius: '10px' }, onclick: clearAll, title: 'Clear' }, [Icons.close()]) : null,
-    ]);
+    const sc = document.getElementById('scroll-search');
+    sc.innerHTML = '';
+    const bar = h('div', { class: 'search-bar' });
+    const inp = h('input', { type: 'text', placeholder: 'Search entries, tags…', value: state.q, oninput: (e) => { state.q = e.target.value; runSearch(); } });
+    const field = h('div', { class: 'field' }, [I.search(18), inp, state.q ? h('button', { class: 'btn-icon', style: { width: '28px', height: '28px' }, onclick: () => { state.q = ''; state.type = ''; mount(); } }, [I.close(16)]) : null]);
     const filters = h('div', { class: 'filters' });
-    TYPES.forEach((t) => {
-      const chip = h('button', { class: 'chip' + (state.type === t.id ? ' active' : ''), onclick: () => { state.type = t.id; mount(); runSearch(); } }, [t.icon(), ' ' + t.label]);
+    for (const t of TYPES) {
+      const chip = h('button', { class: 'chip' + (state.type === t.id ? ' on' : ''), onclick: () => { state.type = t.id; mount(); } }, [t.icon(), ' ' + t.label]);
       filters.appendChild(chip);
-    });
+    }
     bar.append(field, filters);
+    sc.appendChild(bar);
 
-    if (!state.q && !state.type) renderSuggestions();
-    else runSearch();
+    const out = h('div', { class: 'scroll', style: { flex: '1' } });
+    sc.appendChild(out);
 
-    setTimeout(() => document.getElementById('searchInput')?.focus(), 30);
+    if (state.q || state.type) runSearch();
+    else renderSuggestions(out);
+    setTimeout(() => inp.focus(), 50);
   }
 
-  function clearAll() { state = { q: '', type: '' }; mount(); }
-  const onInput = debounce((v) => { state.q = v.trim(); if (!state.q) { mount(); return; } runSearch(); }, 200);
-
-  async function runSearch() {
-    const out = document.getElementById('searchResults');
-    out.innerHTML = '';
-    out.appendChild(h('div', { class: 'ptr show', text: 'Searching…' }));
+  let searchTimer;
+  function runSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(_run, 200);
+  }
+  async function _run() {
+    const sc = document.getElementById('scroll-search');
+    const out = sc.querySelector('.scroll:last-child') || sc.lastElementChild;
+    out.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
     try {
-      const params = {};
-      if (state.q) params.q = state.q;
-      if (state.type) params.type = state.type;
-      params.limit = 50;
-      const { posts } = await Api.search(params);
+      const { posts } = await A.search({ q: state.q, type: state.type, limit: 50 });
       out.innerHTML = '';
-      if (!posts.length) { out.appendChild(emptyResults()); return; }
-      out.appendChild(h('div', { class: 'ptr show', text: posts.length + ' result' + (posts.length === 1 ? '' : 's') }));
+      if (!posts.length) { out.appendChild(h('div', { class: 'empty' }, [h('h3', { text: 'No results' }), h('p', { text: 'Try different words or filters.' })])); return; }
+      out.appendChild(h('div', { class: 'day', text: posts.length + ' result' + (posts.length === 1 ? '' : 's') }));
       const feed = h('div', { class: 'feed' });
-      // build parent chain for "reply to" preview
-      const allById = { ...Store.state.byId };
+      const allById = { ...S.byId };
       posts.forEach((p) => allById[p.id] = p);
-      posts.forEach((p) => {
+      for (const p of posts) {
         const parent = p.parent_id ? allById[p.parent_id] : null;
         feed.appendChild(Feed.renderPost(p, { isMe: p.id.charCodeAt(0) % 2 === 0, parent: parent || undefined }));
-      });
+      }
       out.appendChild(feed);
     } catch (e) {
       out.innerHTML = '';
-      out.appendChild(h('div', { class: 'empty' }, [h('h3', { text: 'Search failed' }), h('p', { text: e.body?.error || e.message })]));
+      out.appendChild(h('div', { class: 'empty' }, [h('h3', { text: 'Search failed' }), h('p', { text: e.message })]));
     }
   }
 
-  function emptyResults() {
-    return h('div', { class: 'empty' }, [
-      h('div', { class: 'glyph' }, [Icons.search()]),
-      h('h3', { text: 'No matches' }),
-      h('p', { text: 'Try a different word or filter.' }),
-    ]);
-  }
-
-  function renderSuggestions() {
-    const out = document.getElementById('searchResults');
+  function renderSuggestions(out) {
     out.innerHTML = '';
-    const host = h('div', { class: 'suggest-list' });
-
-    // Top tags
-    const tags = Object.entries(Store.state.tags).sort((a, b) => b[1] - a[1]).slice(0, 12);
+    const s = h('div', { class: 'suggest' });
+    const tags = Object.entries(S.tags).sort((a, b) => b[1] - a[1]).slice(0, 12);
     if (tags.length) {
-      host.appendChild(h('h4', { text: 'Tags' }));
-      tags.forEach(([t, n]) => {
-        host.appendChild(h('button', { class: 'suggest-item', onclick: () => { state.q = t; mount(); runSearch(); } }, [
-          h('div', { class: 'glyph' }, [Icons.tag()]),
-          h('div', { class: 'body' }, [h('div', { class: 'ttl', text: '#' + t }), h('div', { class: 'sub', text: n + ' entr' + (n === 1 ? 'y' : 'ies') })]),
+      s.appendChild(h('h4', { text: 'Tags' }));
+      for (const [t, n] of tags) {
+        s.appendChild(h('button', { class: 'item', onclick: () => { state.q = t; mount(); } }, [
+          h('div', { class: 'ic' }, [I.tag(16)]),
+          h('div', { class: 'body' }, [h('div', { class: 't', text: '#' + t }), h('div', { class: 's', text: n + ' entr' + (n === 1 ? 'y' : 'ies') })]),
         ]));
-      });
+      }
     }
-
-    // Recent entries (preview)
-    const recent = Store.state.timeline.slice(-8).reverse();
+    const recent = S.posts.slice(-8).reverse();
     if (recent.length) {
-      host.appendChild(h('h4', { text: 'Recent' }));
-      recent.forEach((p) => {
+      s.appendChild(h('h4', { text: 'Recent' }));
+      for (const p of recent) {
         const preview = (p.content || (p.media?.length ? '[' + p.media[0].type + ']' : 'Entry')).slice(0, 60);
-        host.appendChild(h('button', { class: 'suggest-item', onclick: () => Feed.openThread(p.id) }, [
-          h('div', { class: 'glyph' }, [Icons.clock()]),
-          h('div', { class: 'body' }, [h('div', { class: 'ttl', text: preview || 'Entry' }), h('div', { class: 'sub', text: smartStamp(p.created_at) })]),
+        s.appendChild(h('button', { class: 'item', onclick: () => Feed.openThread(p.id) }, [
+          h('div', { class: 'ic' }, [I.bookmark(16)]),
+          h('div', { class: 'body' }, [h('div', { class: 't', text: preview || 'Entry' }), h('div', { class: 's', text: smartTime(p.created_at) })]),
         ]));
-      });
+      }
     }
-
     if (!tags.length && !recent.length) {
-      host.appendChild(h('div', { class: 'empty' }, [
-        h('div', { class: 'glyph' }, [Icons.search()]),
-        h('h3', { text: 'Find anything' }),
-        h('p', { text: 'Search your entries, filter by media type, or jump back into a tag.' }),
-      ]));
+      s.appendChild(h('div', { class: 'empty' }, [h('h3', { text: 'Search your journal' }), h('p', { text: 'Find entries by word, tag, or media type.' })]));
     }
-
-    out.appendChild(host);
+    out.appendChild(s);
   }
 
-  global.Search = { mount };
+  global.Search = { mount, refresh: mount };
 })(window);
