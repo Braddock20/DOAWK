@@ -1,303 +1,182 @@
-/* app.js — bootstrap, lock screen, tab routing, install prompt, PWA wiring */
+/* app.js — bootstrap, lock screen, routing, mount views */
 (function (global) {
   'use strict';
+  const { h, ls, toast, sha256 } = global.U;
+  const S = global.S;
+  const I = global.I;
 
-  const { h, ls, toast, confirm: confirmSheet } = window.Util;
-  const Store = window.Store;
-  const Icons = window.Icons;
+  const TABS = [
+    { id: 'home',     label: 'Home',     icon: () => I.home(20) },
+    { id: 'search',   label: 'Search',   icon: () => I.search(20) },
+    { id: 'pins',     label: 'Pins',     icon: () => I.pin(20) },
+    { id: 'tags',     label: 'Tags',     icon: () => I.tag(20) },
+    { id: 'media',    label: 'Media',    icon: () => I.media(20) },
+    { id: 'settings', label: 'Settings', icon: () => I.gear(20) },
+  ];
 
-  /* ---------- DOM bootstrap ---------- */
   function buildShell() {
     const app = h('div', { id: 'app' });
 
-    // Top bar
-    const top = h('header', { class: 'top' }, [
-      h('div', { class: 'brand' }, [
-        h('div', { class: 'logo', id: 'brandLogo' }, [h('span', { text: 'G' })]),
-        h('div', { class: 'titles' }, [
-          h('div', { class: 'name', id: 'brandName', text: 'Glass Journal' }),
-          h('div', { class: 'sub', id: 'brandSub', text: 'A private place for your thoughts' }),
-        ]),
-      ]),
-      h('div', { class: 'actions', id: 'topActions' }),
-    ]);
+    // top bar
+    const bar = h('div', { class: 'bar' });
+    bar.appendChild(h('div', { class: 'title', id: 'title', text: 'Glass Journal' }));
+    const actions = h('div', { style: { display: 'flex', gap: '4px', marginLeft: 'auto' } });
+    bar.appendChild(actions);
+    app.appendChild(bar);
 
-    // Tabs
-    const tabs = h('nav', { class: 'tabs', id: 'tabs' });
+    // tabs
+    const tabs = h('div', { class: 'tabs', id: 'tabs' });
+    app.appendChild(tabs);
 
-    // Views
-    const views = h('main', { id: 'views' }, [
-      h('section', { class: 'view', 'data-view': 'home' },    [h('div', { class: 'scroll pad-bottom', id: 'homeScroll' },    [h('div', { class: 'feed', id: 'feed' })])]),
-      h('section', { class: 'view', 'data-view': 'search' },  [h('div', { class: 'search-bar', id: 'searchBar' }),        h('div', { class: 'scroll pad-bottom', id: 'searchResults' }, [h('div', { class: 'suggest-list', id: 'suggestList' })])]),
-      h('section', { class: 'view', 'data-view': 'pins' },    [h('div', { class: 'scroll pad-bottom', id: 'pinsScroll' },   [h('div', { class: 'feed', id: 'pinFeed' })])]),
-      h('section', { class: 'view', 'data-view': 'tags' },    [h('div', { class: 'scroll pad-bottom', id: 'tagsScroll' },   [h('div', { class: 'tag-cloud', id: 'tagCloud' })])]),
-      h('section', { class: 'view', 'data-view': 'media' },   [h('div', { class: 'scroll pad-bottom', id: 'mediaScroll' },  [h('div', { class: 'library-grid', id: 'mediaGrid' })])]),
-      h('section', { class: 'view', 'data-view': 'settings' },[h('div', { class: 'scroll pad-bottom', id: 'settingsScroll' })]),
-      h('section', { class: 'view', 'data-view': 'thread' },  [h('div', { class: 'scroll pad-bottom', id: 'threadScroll' }, [h('div', { class: 'feed', id: 'threadFeed' })])]),
-    ]);
+    // views
+    const views = h('div', { style: { flex: '1', minHeight: '0', display: 'flex' } });
+    for (const t of TABS) {
+      const v = h('section', { class: 'view', 'data-view': t.id });
+      v.appendChild(h('div', { class: 'scroll', 'data-scroll': t.id, id: 'scroll-' + t.id }));
+      views.appendChild(v);
+    }
+    // thread view (special)
+    const tv = h('section', { class: 'view', 'data-view': 'thread' });
+    tv.appendChild(h('div', { class: 'scroll', id: 'scroll-thread' }));
+    views.appendChild(tv);
+    app.appendChild(views);
 
-    // Composer (docked)
-    const composerHost = h('div', { id: 'composerHost' });
+    // composer
+    const composer = h('div', { id: 'composer' });
+    app.appendChild(composer);
 
-    // Toast
-    const toastWrap = h('div', { class: 'toast-wrap' });
-
-    // Install prompt
-    const install = h('div', { class: 'install-prompt', id: 'installPrompt' }, [
-      h('div', { class: 'body' }, [
-        h('div', { class: 'ttl', text: 'Install Glass Journal' }),
-        h('div', { class: 'sub', text: 'Add to your home screen for a fullscreen app experience.' }),
-      ]),
-      h('button', { class: 'dismiss', text: 'Later', onclick: (e) => { e.currentTarget.closest('.install-prompt').classList.remove('show'); } }),
-      h('button', { class: 'install', text: 'Install', onclick: (e) => triggerInstall(e) }),
-    ]);
-
-    app.append(top, tabs, views, composerHost, toastWrap, install);
     document.body.appendChild(app);
-  }
 
-  /* ---------- Tab bar ---------- */
-  const TAB_DEFS = [
-    { id: 'home',    label: 'Home',    icon: () => Icons.home() },
-    { id: 'search',  label: 'Search',  icon: () => Icons.search() },
-    { id: 'pins',    label: 'Pinned',  icon: () => Icons.pin() },
-    { id: 'tags',    label: 'Tags',    icon: () => Icons.tag() },
-    { id: 'media',   label: 'Media',   icon: () => Icons.media() },
-    { id: 'settings',label: 'Settings',icon: () => Icons.settings() },
-  ];
+    Composer.mount(composer);
+    Feed.mount();
+    Thread.mount();
+    Pins.mount();
+    Tags.mount();
+    MediaLib.mount();
+    Search.mount();
+    Settings.mount();
+  }
 
   function buildTabs() {
     const host = document.getElementById('tabs');
     host.innerHTML = '';
-    for (const t of TAB_DEFS) {
-      const btn = h('button', { class: 'tab', 'data-tab': t.id, onclick: () => switchTab(t.id) }, [
+    for (const t of TABS) {
+      const btn = h('button', { class: 'tab', 'data-tab': t.id, onclick: () => go(t.id) }, [
         t.icon(),
         h('span', { text: t.label }),
+        h('span', { class: 'n', id: 'cnt-' + t.id }),
       ]);
       host.appendChild(btn);
     }
-    refreshTabBadges();
+    refreshCounts();
   }
 
-  function refreshTabBadges() {
-    const tabs = document.querySelectorAll('.tab');
-    tabs.forEach((el) => {
-      const id = el.dataset.tab;
-      const old = el.querySelector('.badge'); if (old) old.remove();
-      let n = 0;
-      if (id === 'pins') n = pinCount();
-      if (id === 'tags')  n = Object.keys(Store.state.tags).length;
-      if (id === 'media') n = mediaCount();
-      if (n > 0) {
-        const b = h('span', { class: 'badge', text: n > 99 ? '99+' : String(n) });
-        el.appendChild(b);
-      }
-    });
+  function refreshCounts() {
+    const set = (id, n) => { const el = document.getElementById('cnt-' + id); if (el) el.textContent = n > 0 ? '·' + n : ''; };
+    set('pins', (ls.get('pins', []) || []).length);
+    set('tags', Object.keys(S.tags).length);
+    let m = 0; for (const p of S.posts) m += (p.media || []).length; set('media', m);
   }
 
-  function pinCount() {
-    return (ls.get('pins', []) || []).length;
-  }
-  function mediaCount() {
-    let c = 0;
-    for (const p of Store.state.timeline) c += (p.media || []).length;
-    return c;
+  function updateTitle() {
+    const t = S.active === 'thread' ? 'Thread' : (TABS.find((x) => x.id === S.active)?.label || 'Glass Journal');
+    const el = document.getElementById('title');
+    if (el) el.textContent = t;
   }
 
-  function switchTab(id, opts = {}) {
-    Store.state.activeTab = id;
+  function setActions(buttons) {
+    const top = document.querySelector('.bar > div:last-child');
+    // re-grab — the actions div is the one with marginLeft:auto
+    const all = document.querySelectorAll('.bar > div');
+    const host = all[all.length - 1];
+    host.innerHTML = '';
+    for (const b of (buttons || [])) host.appendChild(b);
+  }
+
+  function go(id) {
+    S.active = id;
     document.querySelectorAll('.tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === id));
     document.querySelectorAll('.view').forEach((el) => el.classList.toggle('active', el.dataset.view === id));
-    // Mount the relevant view module
-    if (id === 'home')     Feed.mount();
-    if (id === 'search')   Search.mount();
-    if (id === 'pins')     Pins.mount();
-    if (id === 'tags')     Tags.mount();
-    if (id === 'media')    Media.mount();
-    if (id === 'settings') Settings.mount();
-    if (id === 'thread' && opts.threadId) Thread.mount(opts.threadId);
-    document.getElementById('composerHost').style.display = (id === 'thread') ? 'none' : 'block';
-    window.scrollTo(0, 0);
+    document.getElementById('composer').style.display = id === 'thread' ? 'none' : 'block';
+    updateTitle();
+    setActions([h('button', { class: 'btn-icon', title: 'New', onclick: () => { go('home'); setTimeout(() => document.getElementById('cText')?.focus(), 30); } }, [I.plus(22)])]);
+    if (id === 'home')     Feed.refresh();
+    if (id === 'search')   Search.refresh();
+    if (id === 'pins')     Pins.refresh();
+    if (id === 'tags')     Tags.refresh();
+    if (id === 'media')    MediaLib.refresh();
+    if (id === 'settings') Settings.refresh();
+    if (id === 'thread' && S.threadId) Thread.refresh();
+    // reset scroll to top
+    const sc = document.getElementById('scroll-' + id);
+    if (sc) sc.scrollTop = 0;
   }
 
-  /* ---------- Lock screen (password gate) ---------- */
-  async function showLock() {
-    if (!Store.state.passwordHash) { Store.state.locked = false; return mountApp(); }
-    if (!Store.state.locked) return mountApp();
-
-    const lock = h('div', { class: 'lock', id: 'lockScreen' });
-    const form = h('form', {});
-    const pw = h('input', { type: 'password', placeholder: 'Passcode', autocomplete: 'current-password', inputmode: 'numeric', pattern: '[0-9]*' });
+  /* ---------- lock screen ---------- */
+  function showLock() {
+    const lock = h('div', { class: 'lock' });
+    const pw = h('input', { type: 'password', placeholder: 'Passcode', inputMode: 'numeric', pattern: '[0-9]*', autocomplete: 'off' });
     const err = h('div', { class: 'err' });
-    const btn = h('button', { class: 'btn', text: 'Unlock' });
-    const hint = h('div', { class: 'hint', text: 'Enter your passcode to view your journal.' });
-
-    form.append(pw, btn, err, hint);
+    const form = h('form', { onsubmit: (e) => { e.preventDefault(); tryUnlock(); } }, [
+      pw,
+      h('button', { class: 'unlock', text: 'Unlock', type: 'submit' }),
+      err,
+    ]);
     lock.append(
-      h('div', { class: 'brand-big' }, [h('span', { html: renderMiniLogo() })]),
+      h('div', { class: 'logo' }, [I.lock(28)]),
       h('h1', { text: 'Glass Journal' }),
-      h('p', { text: 'Private. Yours. Encrypted on this device.' }),
+      h('p', { text: 'Enter your passcode to continue.' }),
       form,
     );
     document.body.appendChild(lock);
+    setTimeout(() => pw.focus(), 100);
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const ok = await Store.verifyPassword(pw.value);
-      if (ok) {
-        Store.state.locked = false;
-        lock.remove();
-        mountApp();
-      } else {
-        err.textContent = 'Wrong passcode';
-        pw.value = '';
-        pw.focus();
-      }
-    });
-    setTimeout(() => pw.focus(), 50);
+    async function tryUnlock() {
+      if (await S.checkPw(pw.value)) { lock.remove(); mountApp(); }
+      else { err.textContent = 'Wrong passcode'; pw.value = ''; pw.focus(); }
+    }
   }
 
-  function renderMiniLogo() {
-    return '<svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h14a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>';
-  }
-
-  /* ---------- Apply theme ---------- */
   function applyTheme() {
-    const t = Store.state.theme || 'dark';
-    document.documentElement.setAttribute('data-theme', t);
-    const m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.setAttribute('content', getComputedStyle(document.body).backgroundColor || '#0a0a0c');
-    // Background
-    if (Store.state.bg) {
+    document.documentElement.setAttribute('data-theme', S.theme);
+    if (S.bg) {
       document.documentElement.classList.add('has-bg');
-      document.documentElement.style.setProperty('--bg-image', `url("${Store.state.bg}")`);
+      document.documentElement.style.setProperty('--bg-image', `url("${S.bg}")`);
     } else {
       document.documentElement.classList.remove('has-bg');
     }
   }
 
-  /* ---------- Install prompt ---------- */
-  let deferredPrompt = null;
-  function setupInstall() {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      // Only auto-show if user has not dismissed
-      if (!ls.get('installDismissed', false)) {
-        document.getElementById('installPrompt').classList.add('show');
-      }
-    });
-    window.addEventListener('appinstalled', () => {
-      deferredPrompt = null;
-      document.getElementById('installPrompt').classList.remove('show');
-      toast('Installed! Open from your home screen.', 'success');
-    });
-  }
-  async function triggerInstall(e) {
-    e.currentTarget.closest('.install-prompt').classList.remove('show');
-    if (!deferredPrompt) { toast('Use your browser\'s "Add to Home Screen" option.', '', 3500); return; }
-    deferredPrompt.prompt();
-    const r = await deferredPrompt.userChoice;
-    if (r.outcome !== 'accepted') ls.set('installDismissed', true);
-    deferredPrompt = null;
-  }
-
-  /* ---------- Top bar (dynamic brand text + actions) ---------- */
-  function renderTopActions() {
-    const host = document.getElementById('topActions');
-    host.innerHTML = '';
-    const searchBtn = h('button', { class: 'icon-btn', title: 'Search', onclick: () => switchTab('search') }, [Icons.search()]);
-    const newBtn = h('button', { class: 'icon-btn', title: 'New entry', onclick: () => openNewPost() }, [Icons.plus()]);
-    host.append(searchBtn, newBtn);
-  }
-
-  function openNewPost() {
-    if (Store.state.activeTab !== 'home') switchTab('home');
-    requestAnimationFrame(() => {
-      const c = document.getElementById('composerText');
-      if (c) { c.focus(); c.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-    });
-  }
-
-  /* ---------- Service worker ---------- */
-  function registerSW() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => { /* ignore */ });
-    }
-  }
-
-  /* ---------- Mount main app ---------- */
-  async function mountApp() {
+  function mountApp() {
     buildShell();
     buildTabs();
-    renderTopActions();
-    applyTheme();
-    Composer.mount(document.getElementById('composerHost'));
-    Settings.ensureMounted();
-    // Initial state from URL ?tab=
-    const params = new URLSearchParams(location.search);
-    const wanted = params.get('tab');
-    if (wanted && TAB_DEFS.find((t) => t.id === wanted)) switchTab(wanted);
-    else switchTab('home');
+    go('home');
     Feed.refresh();
   }
 
-  /* ---------- Boot ---------- */
-  function boot() {
-    Store.hydrate();
-    applyTheme();
-    // Remove splash
-    const splash = document.getElementById('splash');
-    if (splash) { splash.classList.add('gone'); setTimeout(() => splash.remove(), 280); }
-
-    if (Store.state.locked) showLock();
-    else mountApp();
-    setupInstall();
-    registerSW();
-
-    // Surface unhandled errors so they don't disappear silently
-    window.addEventListener('error', (e) => {
-      console.error('[gj]', e.error || e.message);
-      toast('Something went wrong: ' + (e.message || 'unknown'), 'error', 4000);
-    });
-    window.addEventListener('unhandledrejection', (e) => {
-      console.error('[gj]', e.reason);
-      toast('Promise error: ' + ((e.reason && e.reason.message) || e.reason), 'error', 4000);
-    });
-
-    // Re-apply theme when prefs change
-    Store.on(() => {
-      applyTheme();
-      refreshTabBadges();
-    });
-
-    // Keyboard shortcut: "/" focuses search
-    document.addEventListener('keydown', (e) => {
-      if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-        e.preventDefault(); switchTab('search');
-        setTimeout(() => document.querySelector('#searchInput')?.focus(), 50);
-      }
-    });
-
-    // URL bar updates on tab change for shareable links
-    window.addEventListener('popstate', () => {
-      const p = new URLSearchParams(location.search);
-      const t = p.get('tab');
-      if (t) switchTab(t);
-    });
+  function registerSW() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
   }
 
-  // modules
-  const Feed     = global.Feed;
-  const Search   = global.Search;
-  const Pins     = global.Pins;
-  const Tags     = global.Tags;
-  const Media    = global.Media;
-  const Settings = global.Settings;
-  const Composer = global.Composer;
+  function boot() {
+    S.hydrate();
+    applyTheme();
+    const splash = document.getElementById('splash');
+    if (splash) { splash.classList.add('gone'); setTimeout(() => splash.remove(), 200); }
 
-  // Expose for components
-  global.App = { switchTab, refreshTabBadges, applyTheme, openNewPost, TAB_DEFS };
+    if (S.pwHash) showLock(); else mountApp();
+    registerSW();
 
-  document.addEventListener('DOMContentLoaded', boot);
+    window.addEventListener('error', (e) => console.error('[gj]', e.error || e.message));
+    window.addEventListener('unhandledrejection', (e) => console.error('[gj]', e.reason));
+  }
+
+  // modules wired in via other files
+  const Composer = global.Composer, Feed = global.Feed, Thread = global.Thread, Pins = global.Pins, Tags = global.Tags, MediaLib = global.MediaLib, Search = global.Search, Settings = global.Settings;
+  global.App = { go, refreshCounts, applyTheme };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })(window);
