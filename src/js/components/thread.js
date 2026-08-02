@@ -1,113 +1,64 @@
-/* thread.js — single post with nested replies (depth up to 3) */
+/* thread.js — post detail with nested replies */
 (function (global) {
   'use strict';
-  const { h, smartStamp, toast, linkify } = window.Util;
-  const Store = window.Store;
-  const Icons = window.Icons;
+  const { h, toast, linkify, smartTime, fmtDur, sheet, closeSheet } = global.U;
+  const S = global.S;
+  const I = global.I;
 
-  let currentId = null;
-
-  async function mount(id) {
-    currentId = id;
-    const host = document.getElementById('threadScroll');
-    host.innerHTML = '';
-    host.appendChild(h('div', { class: 'ptr show', text: 'Loading thread…' }));
-    try {
-      const { post } = await Api.getPost(id);
-      Store.upsertPost(post);
-      Store.setReplies(id, post.replies || []);
-      render(post);
-    } catch (e) {
-      host.innerHTML = '';
-      host.appendChild(h('div', { class: 'empty' }, [
-        h('div', { class: 'glyph' }, [Icons.info()]),
-        h('h3', { text: 'Thread not found' }),
-        h('p', { text: e.body?.error || e.message }),
-        h('button', { class: 'tab', onclick: () => App.switchTab('home') }, 'Back to Home'),
-      ]));
-    }
-  }
-
+  function mount() {}
   async function refresh() {
-    if (!currentId) return;
+    if (!S.threadId) return;
+    const sc = document.getElementById('scroll-thread');
+    sc.innerHTML = '';
+    sc.appendChild(h('div', { class: 'empty' }, [h('div', { class: 'spinner' })]));
     try {
-      const { post } = await Api.getPost(currentId);
-      Store.upsertPost(post);
-      Store.setReplies(currentId, post.replies || []);
-      render(post);
-    } catch {}
-  }
-
-  function render(root) {
-    const host = document.getElementById('threadScroll');
-    host.innerHTML = '';
-    const feed = h('div', { class: 'feed' });
-
-    // Back button
-    const back = h('button', { class: 'chip-btn', style: { margin: '4px 6px' }, onclick: () => App.switchTab('home') }, [Icons.arrowUp(), 'Back']);
-    feed.appendChild(back);
-
-    feed.appendChild(Feed.renderPost(root, { isMe: root.id.charCodeAt(0) % 2 === 0 }));
-
-    // Reply count
-    const total = countAll(root.replies || []);
-    if (total > 0) {
-      feed.appendChild(h('div', { class: 'day-divider', text: total + ' repl' + (total === 1 ? 'y' : 'ies') }));
+      const { post } = await A.get(S.threadId);
+      S.upsert(post);
+      const wrap = h('div', { class: 'feed' });
+      wrap.appendChild(h('div', { style: { padding: '8px 14px' } }, [h('button', { class: 'btn-icon', onclick: () => App.go('home') }, [I.back(22)])]));
+      wrap.appendChild(Feed.renderPost(post, { isMe: post.id.charCodeAt(0) % 2 === 0 }));
+      if (post.replies?.length) {
+        wrap.appendChild(h('div', { class: 'day', text: post.replies.length + ' repl' + (post.replies.length === 1 ? 'y' : 'ies') }));
+        const renderLevel = (parent, replies) => {
+          const c = h('div', { class: 'children' });
+          for (const r of replies) {
+            c.appendChild(Feed.renderPost(r, { isMe: r.id.charCodeAt(0) % 2 === 0, parent, depth: 1 }));
+            if (r.replies?.length) c.appendChild(renderLevel(r, r.replies));
+          }
+          return c;
+        };
+        wrap.appendChild(renderLevel(post, post.replies));
+      }
+      // quick reply box
+      const replyBox = h('div', { class: 'composer', style: { position: 'sticky', bottom: 0, margin: '14px 0 0' } }, [
+        (() => {
+          const r = h('div', { class: 'row' });
+          const ta = h('textarea', { rows: '1', placeholder: 'Reply…' });
+          ta.style.cssText = 'flex:1;border:0;outline:0;resize:none;background:rgba(0,0,0,.04);border-radius:20px;padding:10px 14px;font:inherit;color:inherit;min-height:40px;max-height:120px;';
+          ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px'; });
+          ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(ta); } });
+          const sb = h('button', { class: 'btn-send', onclick: () => send(ta) }, [I.send(18)]);
+          r.append(ta, sb);
+          return r;
+        })(),
+      ]);
+      wrap.appendChild(replyBox);
+      sc.innerHTML = '';
+      sc.appendChild(wrap);
+    } catch (e) {
+      sc.innerHTML = '';
+      sc.appendChild(h('div', { class: 'empty' }, [h('h3', { text: 'Thread not found' }), h('p', { text: e.message })]));
     }
-
-    // Render nested replies
-    const renderLevel = (parent, replies, depth) => {
-      const wrap = h('div', { class: 'thread-children' });
-      replies.forEach((r) => {
-        wrap.appendChild(Feed.renderPost(r, { isMe: r.id.charCodeAt(0) % 2 === 0, isReply: true, depth, parent }));
-        if (r.replies && r.replies.length) renderLevel(r, r.replies, depth + 1);
-      });
-      return wrap;
-    };
-    if (root.replies?.length) feed.appendChild(renderLevel(root, root.replies, 1));
-
-    // Reply composer at bottom
-    const replyBox = h('div', { class: 'composer', style: { position: 'static', margin: '14px 6px 0', borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--surface)' } }, [
-      h('div', { class: 'row' }, [
-        h('div', { class: 'input-wrap' }, [
-          (() => {
-            const t = h('textarea', { rows: '1', placeholder: 'Reply to this entry…' });
-            t.style.cssText = 'width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--text);font:inherit;line-height:1.4;padding:8px 0;';
-            t.addEventListener('input', () => { t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; });
-            t.addEventListener('keydown', (e) => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(t.value, t); }
-            });
-            return t;
-          })(),
-        ]),
-        h('button', { class: 'send', title: 'Send', onclick: (e) => { const t = e.currentTarget.parentNode.querySelector('textarea'); send(t.value, t); } }, [Icons.send()]),
-      ]),
-    ]);
-    feed.appendChild(replyBox);
-
-    host.appendChild(feed);
-    host.scrollTop = 0;
   }
-
-  function countAll(replies) {
-    let n = 0;
-    function walk(r) { for (const x of r) { n++; if (x.replies?.length) walk(x.replies); } }
-    walk(replies);
-    return n;
-  }
-
-  async function send(text, ta) {
-    const content = (text || '').trim();
-    if (!content) { toast('Type a reply first', 'error'); return; }
+  async function send(ta) {
+    const text = (ta.value || '').trim();
+    if (!text) return;
     try {
-      await Api.createPost({ content, parentId: currentId });
+      await A.create({ content: text, parentId: S.threadId });
       ta.value = ''; ta.style.height = 'auto';
       await refresh();
-      toast('Reply sent', 'success', 1200);
-    } catch (e) {
-      toast('Reply failed: ' + (e.body?.error || e.message), 'error');
-    }
+      toast('Reply sent', 'success', 1000);
+    } catch (e) { toast('Reply failed: ' + e.message, 'error'); }
   }
-
   global.Thread = { mount, refresh };
 })(window);
