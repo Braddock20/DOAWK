@@ -22,7 +22,7 @@
     host.innerHTML = '';
     host.className = 'composer';
 
-    replyEl = h('div', { class: 'reply-quote', style: { display: 'none' } });
+    replyEl = h('div', { class: 'reply-bar', style: { display: 'none' } });
     attsEl = h('div', { class: 'atts' });
     tagsEl = h('div', { class: 'tags-row' });
 
@@ -38,6 +38,7 @@
         state.tags.pop(); renderTags();
       }
     });
+    tagsEl.appendChild(tagInput);
 
     ta = h('textarea', { id: 'cText', rows: '1', placeholder: 'Write a thought…' });
     ta.addEventListener('input', autoresize);
@@ -46,7 +47,7 @@
     });
 
     sendBtn = h('button', { class: 'btn-send', title: 'Send', onclick: submit }, [I.send(18)]);
-    const attBtn = h('button', { class: 'btn-icon', title: 'Attach', onclick: () => fileInput.click() }, [I.attach(22)]);
+    const attBtn = h('button', { class: 'btn-icon', title: 'Attach files', onclick: () => fileInput.click() }, [I.attach(22)]);
     const micBtn = h('button', { class: 'btn-icon', title: 'Voice note', onclick: () => Recorder.open() }, [I.mic(22)]);
 
     fileInput = h('input', { type: 'file', multiple: true, accept: 'image/*,video/*,audio/*,application/pdf,application/zip,application/vnd.android.package-archive', style: { display: 'none' } });
@@ -57,9 +58,8 @@
     document.body.appendChild(fileInput);
 
     const row = h('div', { class: 'row' }, [attBtn, ta, sendBtn, micBtn]);
-    host.append(replyEl, attsEl, row, tagsEl, tagInput);
-    // tags-row appended at end, then input is inside
-    tagsEl.appendChild(tagInput);
+
+    host.append(replyEl, attsEl, row, tagsEl);
 
     renderReply(); renderTags(); renderAtts();
   }
@@ -193,12 +193,19 @@
         try { const { post: parentFresh } = await A.get(state.replyTo.id); S.upsert(parentFresh); } catch {}
       }
       reset();
-      // re-render the active view
-      if (S.active === 'home') Feed.refresh();
-      else if (S.active === 'thread') Thread.refresh();
+      // re-render the active view, then scroll the newest post into full view
+      if (S.active === 'home') {
+        Feed.refresh();
+        requestAnimationFrame(() => {
+          const sc = document.getElementById('scroll-home');
+          if (sc) {
+            const last = sc.querySelector('.card:last-of-type');
+            if (last) last.scrollIntoView({ block: 'end' });
+            else sc.scrollTop = sc.scrollHeight;
+          }
+        });
+      } else if (S.active === 'thread') Thread.refresh();
       App.refreshCounts();
-      const sc = document.getElementById('scroll-home');
-      if (sc) sc.scrollTop = sc.scrollHeight;
       toast('Saved', 'success', 1200);
     } catch (e) {
       toast('Couldn\'t post: ' + e.message, 'error', 4000);
