@@ -1,105 +1,94 @@
-/* app.js — bootstrap, lock screen, routing, mount views */
+/* app.js — bootstrap, lock, routing, mount views */
 (function (global) {
   'use strict';
-  const { h, ls, toast, sha256 } = global.U;
+  const { h, ls, toast } = global.U;
   const S = global.S;
   const I = global.I;
 
   const TABS = [
-    { id: 'home',     label: 'Home',     icon: () => I.home(20) },
-    { id: 'search',   label: 'Search',   icon: () => I.search(20) },
-    { id: 'pins',     label: 'Pins',     icon: () => I.pin(20) },
-    { id: 'tags',     label: 'Tags',     icon: () => I.tag(20) },
-    { id: 'media',    label: 'Media',    icon: () => I.media(20) },
-    { id: 'settings', label: 'Settings', icon: () => I.gear(20) },
+    { id: 'home',     label: 'Home',     icon: () => I.home(22) },
+    { id: 'search',   label: 'Search',   icon: () => I.search(22) },
+    { id: 'pins',     label: 'Pins',     icon: () => I.pin(22) },
+    { id: 'media',    label: 'Media',    icon: () => I.media(22) },
+    { id: 'settings', label: 'Settings', icon: () => I.gear(22) },
   ];
 
   function buildShell() {
     const app = h('div', { id: 'app' });
 
-    // top bar
-    const bar = h('div', { class: 'bar' });
-    bar.appendChild(h('div', { class: 'title', id: 'title', text: 'Glass Journal' }));
-    const actions = h('div', { style: { display: 'flex', gap: '4px', marginLeft: 'auto' } });
-    bar.appendChild(actions);
+    // Top bar
+    const bar = h('div', { class: 'bar' }, [
+      h('div', { class: 'title', id: 'title', text: 'Home' }),
+      h('div', { style: { display: 'flex', gap: '4px' }, id: 'barActions' }),
+    ]);
     app.appendChild(bar);
 
-    // tabs
-    const tabs = h('div', { class: 'tabs', id: 'tabs' });
-    app.appendChild(tabs);
-
-    // views
+    // Views
     const views = h('div', { style: { flex: '1', minHeight: '0', display: 'flex' } });
     for (const t of TABS) {
       const v = h('section', { class: 'view', 'data-view': t.id });
       v.appendChild(h('div', { class: 'scroll', 'data-scroll': t.id, id: 'scroll-' + t.id }));
       views.appendChild(v);
     }
-    // thread view (special)
     const tv = h('section', { class: 'view', 'data-view': 'thread' });
     tv.appendChild(h('div', { class: 'scroll', id: 'scroll-thread' }));
     views.appendChild(tv);
+
+    // Tags view (extra)
+    const tagsv = h('section', { class: 'view', 'data-view': 'tags' });
+    tagsv.appendChild(h('div', { class: 'scroll', id: 'scroll-tags' }));
+    views.appendChild(tagsv);
+
     app.appendChild(views);
 
-    // composer
+    // Composer
     const composer = h('div', { id: 'composer' });
     app.appendChild(composer);
+
+    // Bottom nav
+    const bnav = h('div', { class: 'bnav', id: 'bnav' });
+    app.appendChild(bnav);
 
     document.body.appendChild(app);
 
     Composer.mount(composer);
-    Feed.mount();
-    Thread.mount();
-    Pins.mount();
-    Tags.mount();
-    MediaLib.mount();
-    Search.mount();
-    Settings.mount();
+    Feed.mount(); Thread.mount(); Pins.mount(); Tags.mount();
+    MediaLib.mount(); Search.mount(); Settings.mount();
   }
 
-  function buildTabs() {
-    const host = document.getElementById('tabs');
+  function buildNav() {
+    const host = document.getElementById('bnav');
     host.innerHTML = '';
     for (const t of TABS) {
-      const btn = h('button', { class: 'tab', 'data-tab': t.id, onclick: () => go(t.id) }, [
+      const btn = h('button', { 'data-tab': t.id, onclick: () => go(t.id) }, [
         t.icon(),
         h('span', { text: t.label }),
-        h('span', { class: 'n', id: 'cnt-' + t.id }),
       ]);
       host.appendChild(btn);
     }
-    refreshCounts();
+    // Center compose button? No, just put one in the bar instead.
+    // Update the bar to have a compose (+) action.
+    const actions = document.getElementById('barActions');
+    actions.innerHTML = '';
+    actions.appendChild(h('button', { class: 'btn-icon', title: 'New entry', onclick: () => { go('home'); setTimeout(() => document.getElementById('cText')?.focus(), 30); } }, [I.plus(22)]));
   }
 
   function refreshCounts() {
-    const set = (id, n) => { const el = document.getElementById('cnt-' + id); if (el) el.textContent = n > 0 ? '·' + n : ''; };
-    set('pins', (ls.get('pins', []) || []).length);
-    set('tags', Object.keys(S.tags).length);
-    let m = 0; for (const p of S.posts) m += (p.media || []).length; set('media', m);
+    // optional counts on nav (omitted for cleanliness)
   }
 
   function updateTitle() {
-    const t = S.active === 'thread' ? 'Thread' : (TABS.find((x) => x.id === S.active)?.label || 'Glass Journal');
+    const t = S.active === 'thread' ? 'Thread' : S.active === 'tags' ? 'Tags' : (TABS.find((x) => x.id === S.active)?.label || 'Journal');
     const el = document.getElementById('title');
     if (el) el.textContent = t;
   }
 
-  function setActions(buttons) {
-    const top = document.querySelector('.bar > div:last-child');
-    // re-grab — the actions div is the one with marginLeft:auto
-    const all = document.querySelectorAll('.bar > div');
-    const host = all[all.length - 1];
-    host.innerHTML = '';
-    for (const b of (buttons || [])) host.appendChild(b);
-  }
-
   function go(id) {
     S.active = id;
-    document.querySelectorAll('.tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === id));
+    document.querySelectorAll('.bnav button').forEach((el) => el.classList.toggle('active', el.dataset.tab === id));
     document.querySelectorAll('.view').forEach((el) => el.classList.toggle('active', el.dataset.view === id));
-    document.getElementById('composer').style.display = id === 'thread' ? 'none' : 'block';
+    document.getElementById('composer').style.display = (id === 'thread' || id === 'settings' || id === 'search') ? 'none' : 'block';
     updateTitle();
-    setActions([h('button', { class: 'btn-icon', title: 'New', onclick: () => { go('home'); setTimeout(() => document.getElementById('cText')?.focus(), 30); } }, [I.plus(22)])]);
     if (id === 'home')     Feed.refresh();
     if (id === 'search')   Search.refresh();
     if (id === 'pins')     Pins.refresh();
@@ -107,12 +96,10 @@
     if (id === 'media')    MediaLib.refresh();
     if (id === 'settings') Settings.refresh();
     if (id === 'thread' && S.threadId) Thread.refresh();
-    // reset scroll to top
     const sc = document.getElementById('scroll-' + id);
     if (sc) sc.scrollTop = 0;
   }
 
-  /* ---------- lock screen ---------- */
   function showLock() {
     const lock = h('div', { class: 'lock' });
     const pw = h('input', { type: 'password', placeholder: 'Passcode', inputMode: 'numeric', pattern: '[0-9]*', autocomplete: 'off' });
@@ -139,19 +126,12 @@
 
   function applyTheme() {
     document.documentElement.setAttribute('data-theme', S.theme);
-    if (S.bg) {
-      document.documentElement.classList.add('has-bg');
-      document.documentElement.style.setProperty('--bg-image', `url("${S.bg}")`);
-    } else {
-      document.documentElement.classList.remove('has-bg');
-    }
   }
 
   function mountApp() {
     buildShell();
-    buildTabs();
+    buildNav();
     go('home');
-    Feed.refresh();
   }
 
   function registerSW() {
@@ -173,7 +153,6 @@
     window.addEventListener('unhandledrejection', (e) => console.error('[gj]', e.reason));
   }
 
-  // modules wired in via other files
   const Composer = global.Composer, Feed = global.Feed, Thread = global.Thread, Pins = global.Pins, Tags = global.Tags, MediaLib = global.MediaLib, Search = global.Search, Settings = global.Settings;
   global.App = { go, refreshCounts, applyTheme };
 
